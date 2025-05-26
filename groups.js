@@ -11,6 +11,7 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.*/
+import { sorted } from "./sort.js"
 
 function neighbors(groupMap, group) {
     let result = new Set()
@@ -77,10 +78,78 @@ function capitalizeFirstLetter(str) {
 
 export function getRecipeGroups(recipes) {
     let groups = new Map()
+    let items = new Set()
+    for (let recipe of recipes) {
+        if (recipe.products.length > 0) {
+            groups.set(recipe, new Set([recipe]))
+            for (let ing of recipe.products) {
+                items.add(ing.item)
+            }
+        }
+    }
+    for (let item of items) {
+        let itemRecipes = []
+        for (let recipe of item.allRecipes()) {
+            if (recipes.has(recipe)) {
+                itemRecipes.push(recipe)
+            }
+        }
+        if (itemRecipes.length > 1) {
+            let combined = new Set()
+            for (let recipe of itemRecipes) {
+                for (let r of groups.get(recipe)) {
+                    combined.add(r)
+                }
+            }
+            for (let recipe of combined) {
+                groups.set(recipe, combined)
+            }
+        }
+    }
+    let groupObjects = new Set()
+    for (let [r, group] of groups) {
+        groupObjects.add(group)
+    }
+    return groupObjects
+}
+
+
+const WITH_FLUID = "-with-fluid"
+const OR_HAND = "-or-hand-crafting"
+const OR_ASSEMBLING = "-or-assembling"
+const OR_CHEMISTRY = "-or-chemistry"
+const CHEMISTRY = "chemistry"
+const PRESSING = "pressing"
+const CRAFTING = "crafting"
+
+export function getRecipeCategories(recipes) {
+    let groups = new Map()
     for (let recipe of recipes) {
         let category = recipe.category;
         if (category === null) {
             category = "other"
+        }
+        if (category.endsWith(WITH_FLUID)) {
+            // For settings, it makes more sense to group these with the non-fluid category
+            category = category.replace(WITH_FLUID, "")
+        }
+        if (category.endsWith(OR_HAND)) {
+            // For settings, it makes sense to group this with the non-hand category
+            category = category.replace(OR_HAND, "")
+        }
+        if (category.endsWith(OR_ASSEMBLING) || category.startsWith(CRAFTING) || category.startsWith(PRESSING)) {
+            // The OR_ASSEMBLING ones otherwise end up alone in their categories, so lump them in with Crafting
+            // Others that start with CRAFTING are generally first encountered in regular crafting, so don't split them out
+            // PRESSING are just regular crafting as well
+            category = CRAFTING
+        }
+        if (category.endsWith(OR_CHEMISTRY) || category.startsWith(CHEMISTRY)) {
+            // These recipes are first encountered as chemistry, makes sense to group them with it
+            category = CHEMISTRY
+        }
+        if (category.endsWith("-solid")) {
+            // Separating out hard-solid doesn't make much sense
+            category = "solids"
         }
 
         if (!groups.has(category)) {
@@ -90,14 +159,21 @@ export function getRecipeGroups(recipes) {
     }
 
     // Move "recycling" and "other" to the end
+    let endCategories = ["recycling", "spoilage", "other"]
     let sortedGroups = new Map();
     Array.from(groups.entries()).sort((a, b) => {
-        if (['recycling', "other"].includes(a[0]) && !['recycling', "other"].includes(b[0])) {
+        let endA = endCategories.includes(a[0])
+        let endB = endCategories.includes(b[0])
+        if (endA && !endB) {
             return 1
         }
 
-        if (!['recycling', "other"].includes(a[0]) && ['recycling', "other"].includes(b[0])) {
+        if (!endA && endB) {
             return -1
+        }
+
+        if (endA && endB) {
+            return endCategories.indexOf(a[0]) - endCategories.indexOf(b[0])
         }
 
         return 0;
@@ -105,5 +181,5 @@ export function getRecipeGroups(recipes) {
         sortedGroups.set(category, new Set(recipes))
     })
 
-    return Array.from(sortedGroups.values());
+    return Array.from(sortedGroups.entries());
 }

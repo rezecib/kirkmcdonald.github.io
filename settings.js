@@ -15,7 +15,7 @@ import { DEFAULT_RATE, DEFAULT_RATE_PRECISION, DEFAULT_COUNT_PRECISION, DEFAULT_
 import { colorSchemes } from "./color.js"
 import { DEFAULT_TAB, clickTab, DEFAULT_VISUALIZER, visualizerType, setVisualizerType, DEFAULT_RENDER, visualizerRender, setVisualizerRender, visualizerDirection, getDefaultVisDirection, setVisualizerDirection } from "./events.js"
 import { spec, DEFAULT_PLANET, DEFAULT_BELT, DEFAULT_FUEL, buildingSort } from "./factory.js"
-import { getRecipeGroups, titleCase } from "./groups.js"
+import { getRecipeCategories, titleCase } from "./groups.js"
 import { changeMod } from "./init.js"
 import { shortModules, moduleRows, moduleDropdown } from "./module.js"
 import { Rational, zero } from "./rational.js"
@@ -67,7 +67,7 @@ function normalizeDataSetName(modName) {
 // initialization, and so does not need to wipe and re-render its UI elements.
 export function renderDataSetOptions(settings) {
     let modSelector = document.getElementById("data_set")
-    d3.select(modSelector).on("change", function(event) {
+    d3.select(modSelector).on("change", function (event) {
         changeMod()
     })
     let configuredMod = normalizeDataSetName(settings.get("data"))
@@ -281,7 +281,7 @@ function renderRateOptions(settings) {
     spec.format.setDisplayRate(rateName)
     let rates = []
     for (let [rateName, longRateName] of longRateNames) {
-        rates.push({rateName, longRateName})
+        rates.push({ rateName, longRateName })
     }
     let form = d3.select("#display_rate")
     form.selectAll("*").remove()
@@ -356,16 +356,16 @@ function renderColorScheme(settings) {
     }
     setColorScheme(color)
     d3.select("#color_scheme")
-        .on("change", function(event, d) {
+        .on("change", function (event, d) {
             setColorScheme(event.target.value)
             spec.display()
         })
         .selectAll("option")
         .data(colorSchemes)
         .join("option")
-            .attr("value", d => d.key)
-            .property("selected", d => d.key === color)
-            .text(d => d.name)
+        .attr("value", d => d.key)
+        .property("selected", d => d.key === color)
+        .text(d => d.name)
 }
 
 function setColorScheme(schemeKey) {
@@ -416,7 +416,7 @@ function renderBuildings(settings) {
     let set = div.selectAll("div")
         .data(groups)
         .join("div")
-            .classed("radio-setting", true)
+        .classed("radio-setting", true)
     radioSetting(
         set,
         d => `building_selector_${groupIndex.get(d)}`,
@@ -743,12 +743,24 @@ function renderRecipes(settings) {
         spec.setDefaultDisable()
     }
 
-    let allGroups = getRecipeGroups(new Set(spec.recipes.values()))
+    let allGroups = getRecipeCategories(new Set(spec.recipes.values()))
     let groups = new Map();
-    for (let group of allGroups) {
+    for (let [category, group] of allGroups) {
         if (group.size > 1) {
-            let category = group.values().next().value.category
-            groups.set(category, sorted(group, d => d.order))
+            groups.set(category, sorted(group, (recipe) => {
+                let item = null
+                if (recipe.products.length > 0) {
+                    item = recipe.products[0].item
+                }
+                if (category == "recycling" && recipe.ingredients.length > 0) {
+                    // Sort recycling recipes by their ingredient, so it follows a familiar order
+                    item = recipe.ingredients[0].item
+                }
+                if (item != null) {
+                    return item.group + "-" + item.subgroup + "-" + item.order
+                }
+                return "zzz-" + recipe.order
+            }))
         }
     }
 
@@ -760,38 +772,38 @@ function renderRecipes(settings) {
         planetDiv.selectAll("div")
             .data(planets)
             .join("div")
-                .classed("toggle", true)
-                .classed("selected", d => spec.selectedPlanets.has(d))
-                .on("click", function(event, d) {
-                    if (event.shiftKey) {
-                        event.preventDefault()
-                        let selected = spec.selectedPlanets.has(d)
-                        d3.select(this).classed("selected", !selected)
-                        if (selected) {
-                            spec.unselectPlanet(d)
-                        } else {
-                            spec.selectPlanet(d)
-                        }
+            .classed("toggle", true)
+            .classed("selected", d => spec.selectedPlanets.has(d))
+            .on("click", function (event, d) {
+                if (event.shiftKey) {
+                    event.preventDefault()
+                    let selected = spec.selectedPlanets.has(d)
+                    d3.select(this).classed("selected", !selected)
+                    if (selected) {
+                        spec.unselectPlanet(d)
                     } else {
-                        spec.selectOnePlanet(d)
-                        d3.selectAll("#planet_selector .toggle")
-                            .classed("selected", d => spec.selectedPlanets.has(d))
+                        spec.selectPlanet(d)
                     }
-                    d3.selectAll("#recipe_toggles .toggle")
-                        .classed("selected", d => !spec.disable.has(d))
+                } else {
+                    spec.selectOnePlanet(d)
+                    d3.selectAll("#planet_selector .toggle")
+                        .classed("selected", d => spec.selectedPlanets.has(d))
+                }
+                d3.selectAll("#recipe_toggles .toggle")
+                    .classed("selected", d => !spec.disable.has(d))
 
-                    d3.selectAll("#recipe_toggles .category-label.toggle ")
-                        .each(function() {
-                            let categoryId = d3.select(this).attr("id")
-                            let isSelected = groups.get(categoryId)
-                                .some(recipe => !spec.disable.has(recipe))
+                d3.selectAll("#recipe_toggles .category-label.toggle ")
+                    .each(function () {
+                        let categoryId = d3.select(this).attr("id")
+                        let isSelected = groups.get(categoryId)
+                            .some(recipe => !spec.disable.has(recipe))
 
-                            d3.select(this).classed("selected", isSelected);
-                        })
+                        d3.select(this).classed("selected", isSelected);
+                    })
 
-                    spec.updateSolution()
-                })
-                .append(d => d.icon.make(32))
+                spec.updateSolution()
+            })
+            .append(d => d.icon.make(32))
     }
 
     let div = d3.select("#recipe_toggles")
@@ -807,7 +819,7 @@ function renderRecipes(settings) {
             .attr("class", "category-label toggle")
             .attr("id", category)
             .classed("selected", _ => recipes.some(recipe => !spec.disable.has(recipe)))
-            .on("click", function(event, d) {
+            .on("click", function (event, d) {
                 let disabled = true
                 recipes.forEach(recipe => {
                     if (!spec.disable.has(recipe)) {
@@ -846,7 +858,7 @@ function renderRecipes(settings) {
             .append("div")
             .attr("class", "toggle recipe")
             .classed("selected", d => !spec.disable.has(d))
-            .on("click", function(event, d) {
+            .on("click", function (event, d) {
                 let disabled = spec.disable.has(d)
                 d3.select(this).classed("selected", disabled)
                 if (disabled) {
